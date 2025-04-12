@@ -1,87 +1,62 @@
-import { useAuth } from '@/contexts/auth-context';
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { Logo } from './logo';
 import { Button } from '@/components/ui/button';
-import { SignOutButton } from '@/components/auth/sign-out-button';
+import { useAuth } from '@/contexts/auth-context';
 
 export function Header() {
-  const { user, loading, isAdmin } = useAuth();
+  const pathname = usePathname();
+  const { user, signOut } = useAuth();
 
   return (
-    <header className="border-b border-gray-200 py-4">
-      <div className="container mx-auto px-4 flex justify-between items-center">
-        <div className="flex items-center">
-          <Link href="/" className="text-xl font-bold text-blue-600">
-            Reccos by Fitin
-          </Link>
-          
-          {!loading && (
-            <nav className="ml-10 hidden md:flex space-x-6">
-              <Link href="/" className="text-gray-600 hover:text-blue-600">
-                Home
-              </Link>
-              
-              {user && (
-                <Link href="/my-diet" className="text-gray-600 hover:text-blue-600">
-                  My Diet
-                </Link>
-              )}
-              
-              {isAdmin && (
-                <>
-                  <Link href="/admin/products" className="text-gray-600 hover:text-blue-600">
-                    Products
-                  </Link>
-                  <Link href="/admin/categories" className="text-gray-600 hover:text-blue-600">
-                    Categories
-                  </Link>
-                  <Link href="/admin/meal-types" className="text-gray-600 hover:text-blue-600">
-                    Meal Types
-                  </Link>
-                  <Link href="/admin/users" className="text-gray-600 hover:text-blue-600">
-                    Users
-                  </Link>
-                </>
-              )}
-            </nav>
-          )}
-        </div>
+    <header className="sticky top-0 z-50 w-full border-b bg-brand-cream">
+      <div className="container flex h-16 items-center justify-between">
+        <Logo />
         
-        <div className="flex items-center space-x-4">
-          <Link
-            href="https://fitin.club"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-gray-600 hover:text-blue-600"
+        <nav className="flex items-center space-x-6">
+          <Link 
+            href="/products" 
+            className={`text-sm font-medium ${
+              pathname === '/products' 
+                ? 'text-brand-olive' 
+                : 'text-brand-olive/70 hover:text-brand-olive'
+            }`}
           >
-            Join Fitin
+            Products
           </Link>
-          
-          <Link href="/contact" className="text-gray-600 hover:text-blue-600">
-            Support
-          </Link>
-          
-          {!loading && (
-            <div>
-              {user ? (
-                <div className="flex items-center space-x-4">
-                  <Link href="/profile" className="text-gray-600 hover:text-blue-600">
-                    Profile
-                  </Link>
-                  <SignOutButton />
-                </div>
-              ) : (
-                <div className="flex items-center space-x-2">
-                  <Link href="/login">
-                    <Button variant="outline">Login</Button>
-                  </Link>
-                  <Link href="/signup">
-                    <Button>Sign Up</Button>
-                  </Link>
-                </div>
-              )}
-            </div>
+          {user ? (
+            <>
+              <Link 
+                href="/my-diet" 
+                className={`text-sm font-medium ${
+                  pathname === '/my-diet' 
+                    ? 'text-brand-olive' 
+                    : 'text-brand-olive/70 hover:text-brand-olive'
+                }`}
+              >
+                My Diet
+              </Link>
+              <Button 
+                variant="ghost" 
+                className="text-brand-olive hover:text-brand-olive/70"
+                onClick={() => signOut()}
+              >
+                Sign Out
+              </Button>
+            </>
+          ) : (
+            <Link href="/login">
+              <Button 
+                variant="ghost" 
+                className="text-brand-olive hover:text-brand-olive/70"
+              >
+                Sign In
+              </Button>
+            </Link>
           )}
-        </div>
+        </nav>
       </div>
     </header>
   );
