@@ -53,7 +53,7 @@ export default function HomePage() {
                 </div>
                 <h3 className="text-xl font-semibold mb-3">Expert-Vetted</h3>
                 <p className="text-gray-600">
-                  Every product recommendation is carefully selected and approved by Fitin's health experts.
+                  Every product recommendation is carefully selected and approved by  health experts.
                 </p>
               </div>
               
