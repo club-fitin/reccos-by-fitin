@@ -2,15 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
-import ProductCard from './product-card';
+import { supabase } from '@/lib/supabase/client';
+import ProductCard from '@/components/products/product-card';
 import { Product, Category, MealType } from '@/types';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Search } from 'lucide-react';
 
 export default function ProductSearch() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = createClient();
   
   // Search state
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
@@ -35,19 +36,19 @@ export default function ProductSearch() {
         const { data: categoriesData, error: categoriesError } = await supabase
           .from('categories')
           .select('*')
-          .order('name');
+          .order('name', { ascending: true });
           
         if (categoriesError) throw categoriesError;
-        setCategories(categoriesData);
+        setCategories((categoriesData || []) as Category[]);
         
         // Load meal types
         const { data: mealTypesData, error: mealTypesError } = await supabase
           .from('meal_types')
           .select('*')
-          .order('name');
+          .order('name', { ascending: true });
           
         if (mealTypesError) throw mealTypesError;
-        setMealTypes(mealTypesData);
+        setMealTypes((mealTypesData || []) as MealType[]);
         
         // Load unique dietary tags
         const { data: productsData, error: productsError } = await supabase
@@ -58,7 +59,9 @@ export default function ProductSearch() {
         if (productsError) throw productsError;
         
         // Extract unique tags
-        const allTags = productsData.flatMap(p => p.dietary_tags || []);
+        const allTags = ((productsData || []) as { dietary_tags: string[] | null }[])
+          .flatMap(p => p.dietary_tags || [])
+          .filter(Boolean);
         const uniqueTags = [...new Set(allTags)].sort();
         setDietaryTags(uniqueTags);
       } catch (err) {
@@ -78,47 +81,23 @@ export default function ProductSearch() {
       
       try {
         // Start building the query
-        let query = supabase
+        const { data, error: productsError } = await supabase
           .from('products')
           .select(`
             *,
             category:categories(*),
             meal_types:product_meal_types(meal_type_id)
           `)
-          .eq('status', 'PUBLISHED');
-        
-        // Apply search query
-        if (searchQuery) {
-          query = query.or(`name.ilike.%${searchQuery}%,brand_name.ilike.%${searchQuery}%`);
-        }
-        
-        // Apply category filter
-        if (selectedCategories.length > 0) {
-          query = query.in('category_id', selectedCategories);
-        }
-        
-        // Apply dietary tags filter
-        if (selectedDietaryTags.length > 0) {
-          // This assumes PostgreSQL array contains (@>) operator works with Supabase
-          selectedDietaryTags.forEach(tag => {
-            query = query.contains('dietary_tags', [tag]);
+          .eq('status', 'PUBLISHED')
+          .then((response) => {
+            if (response.error) throw response.error;
+            return response;
           });
-        }
-        
-        // Apply sorting
-        if (sortOrder === 'name-asc') {
-          query = query.order('name', { ascending: true });
-        } else if (sortOrder === 'name-desc') {
-          query = query.order('name', { ascending: false });
-        }
-        
-        const { data, error: productsError } = await query;
         
         if (productsError) throw productsError;
         
-        // Filter by meal types (if selected) - this needs to be done client-side
-        // since we're using a join table
-        let filteredProducts = data || [];
+        // Filter by meal types (if selected)
+        let filteredProducts = (data || []) as Product[];
         
         if (selectedMealTypes.length > 0 && filteredProducts.length > 0) {
           // Post-process to filter by meal types
@@ -130,7 +109,9 @@ export default function ProductSearch() {
             
           if (mealTypeError) throw mealTypeError;
           
-          const productIdsWithSelectedMealTypes = [...new Set(mealTypeRelations.map(r => r.product_id))];
+          const productIdsWithSelectedMealTypes = [...new Set(
+            ((mealTypeRelations || []) as { product_id: string }[]).map(r => r.product_id)
+          )];
           filteredProducts = filteredProducts.filter(p => productIdsWithSelectedMealTypes.includes(p.id));
         }
         
@@ -147,10 +128,29 @@ export default function ProductSearch() {
   }, [searchQuery, selectedCategories, selectedMealTypes, selectedDietaryTags, sortOrder]);
   
   // Handle search submit
-  const handleSearchSubmit = (e: React.FormEvent) => {
+  const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // You might want to update the URL to make searches shareable
-    // router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
+    if (!searchQuery.trim()) return;
+
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .or(`name.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
+    } catch (err) {
+      console.error('Error searching products:', err);
+      setError('Failed to search products. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   // Toggle category filter
@@ -194,18 +194,17 @@ export default function ProductSearch() {
       <div className="md:col-span-1 bg-white p-4 rounded-lg shadow">
         <div className="mb-6">
           <h3 className="font-semibold text-lg mb-3">Search</h3>
-          <form onSubmit={handleSearchSubmit} className="flex">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+          <form onSubmit={handleSearchSubmit} className="flex gap-2">
+            <Input
+              type="search"
               placeholder="Search products..."
-              className="flex-grow px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1"
             />
-            <Button type="submit" className="rounded-l-none">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+            <Button type="submit" disabled={isLoading}>
+              <Search className="w-4 h-4 mr-2" />
+              Search
             </Button>
           </form>
         </div>

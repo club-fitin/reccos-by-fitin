@@ -4,7 +4,6 @@ import { useState, useEffect } from "react"
 import Image from "next/image"
 import { useParams, useRouter } from "next/navigation"
 import Link from 'next/link'
-import { createClient } from "@/lib/supabase/client"
 import { Header } from "@/components/layout/header"
 import { Footer } from "@/components/layout/footer"
 import { useAuth } from '@/contexts/auth-context'
@@ -12,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { useToast } from '@/components/ui/use-toast'
 import { ArrowLeft, Bookmark, BookmarkCheck, ExternalLink, Share, AlertCircle } from "lucide-react"
+import { supabase } from '@/lib/supabase/client'
 
 interface Product {
   id: string
@@ -31,6 +31,13 @@ interface Product {
     id: string
     name: string
   } | null
+}
+
+interface SavedProduct {
+  id: string
+  user_id: string
+  product_id: string
+  created_at: string
 }
 
 export default function ProductPage() {
@@ -56,9 +63,8 @@ export default function ProductPage() {
   const fetchProduct = async () => {
     try {
       setLoading(true)
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('products')
+      const response = await supabase
+        .from<Product>('products')
         .select(`
           *,
           category:category_id (
@@ -70,9 +76,9 @@ export default function ProductPage() {
         .eq('status', 'PUBLISHED')
         .single()
 
-      if (error) throw error
+      if (response.error) throw response.error
       
-      setProduct(data)
+      setProduct(response.data)
     } catch (err) {
       console.error('Error fetching product:', err)
       router.push('/search')
@@ -85,23 +91,22 @@ export default function ProductPage() {
     if (!user || !product) return
     
     try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('saved_products')
+      const response = await supabase
+        .from<SavedProduct>('saved_products')
         .select('*')
         .eq('user_id', user.id)
         .eq('product_id', product.id)
         .maybeSingle()
 
-      if (error) throw error
+      if (response.error) throw response.error
       
-      setIsSaved(!!data)
+      setIsSaved(!!response.data)
     } catch (err) {
       console.error('Error checking saved status:', err)
     }
   }
 
-  const toggleSave = async () => {
+  const handleSaveProduct = async () => {
     if (!user) {
       router.push('/login')
       return
@@ -111,37 +116,61 @@ export default function ProductPage() {
 
     try {
       setSavingStatus('saving')
-      const supabase = createClient()
+      const response = await supabase
+        .from<SavedProduct>('saved_products')
+        .insert({
+          user_id: user.id,
+          product_id: product.id
+        })
+
+      if (response.error) throw response.error
       
-      if (isSaved) {
-        // Delete from saved products
-        const { error } = await supabase
-          .from('saved_products')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('product_id', product.id)
-        
-        if (error) throw error
-        
-        setIsSaved(false)
-      } else {
-        // Add to saved products
-        const { error } = await supabase
-          .from('saved_products')
-          .insert({
-            user_id: user.id,
-            product_id: product.id
-          })
-        
-        if (error) throw error
-        
-        setIsSaved(true)
-      }
-      
+      setIsSaved(true)
       setSavingStatus('success')
+      toast({
+        title: 'Product saved',
+        description: 'Product has been added to your diet',
+      })
     } catch (err) {
-      console.error('Error toggling saved status:', err)
+      console.error('Error saving product:', err)
       setSavingStatus('error')
+      toast({
+        title: 'Error',
+        description: 'Failed to save product. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setTimeout(() => setSavingStatus('idle'), 2000)
+    }
+  }
+
+  const handleUnsaveProduct = async () => {
+    if (!user || !product) return
+
+    try {
+      setSavingStatus('saving')
+      const response = await supabase
+        .from<SavedProduct>('saved_products')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('product_id', product.id)
+
+      if (response.error) throw response.error
+      
+      setIsSaved(false)
+      setSavingStatus('success')
+      toast({
+        title: 'Product removed',
+        description: 'Product has been removed from your diet',
+      })
+    } catch (err) {
+      console.error('Error unsaving product:', err)
+      setSavingStatus('error')
+      toast({
+        title: 'Error',
+        description: 'Failed to remove product. Please try again.',
+        variant: 'destructive',
+      })
     } finally {
       setTimeout(() => setSavingStatus('idle'), 2000)
     }
@@ -280,7 +309,7 @@ export default function ProductPage() {
             <div className="flex space-x-3 mb-8">
               <Button
                 variant="outline"
-                onClick={toggleSave}
+                onClick={isSaved ? handleUnsaveProduct : handleSaveProduct}
                 disabled={savingStatus === 'saving'}
                 className={isSaved ? "bg-green-50" : ""}
               >

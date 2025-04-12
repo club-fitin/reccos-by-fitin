@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { useAuth } from '@/contexts/auth-context'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Trash2 } from 'lucide-react'
 import Link from 'next/link'
@@ -53,19 +53,16 @@ export default function MyDietPage() {
 
     try {
       setLoading(true)
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('saved_products')
+      const response = await supabase
+        .from<SavedProduct>('saved_products')
         .select(`
           *,
           product:product_id (
             id,
             name,
             brand_name,
-            description,
             image_url,
             category_id,
-            dietary_tags,
             category:category_id (
               id,
               name
@@ -75,8 +72,9 @@ export default function MyDietPage() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
 
-      if (error) throw error
-      setSavedProducts(data || [])
+      if (response.error) throw response.error
+      
+      setSavedProducts(response.data || [])
     } catch (err) {
       console.error('Error fetching saved products:', err)
     } finally {
@@ -86,13 +84,13 @@ export default function MyDietPage() {
 
   const handleRemoveProduct = async (savedProductId: string) => {
     try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('saved_products')
-        .delete()
-        .eq('id', savedProductId)
-
-      if (error) throw error
+      await new Promise((resolve) => {
+        supabase
+          .from('saved_products')
+          .delete()
+          .eq('id', savedProductId)
+          .then(resolve)
+      })
       
       // Update state to remove the product
       setSavedProducts(prev => prev.filter(item => item.id !== savedProductId))
@@ -101,26 +99,12 @@ export default function MyDietPage() {
     }
   }
 
-  if (authLoading) {
+  if (loading || authLoading) {
     return (
-      <div className="flex min-h-screen flex-col">
+      <div className="min-h-screen flex flex-col">
         <Header />
         <main className="flex-1 container mx-auto px-4 py-8">
-          <div className="animate-pulse">
-            <div className="h-8 w-1/3 bg-gray-200 rounded mb-8"></div>
-            <div className="grid grid-cols-1 gap-4">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="border rounded-lg p-5 flex">
-                  <div className="h-20 w-20 bg-gray-200 rounded mr-4"></div>
-                  <div className="flex-1">
-                    <div className="h-6 bg-gray-200 rounded mb-2 w-1/3"></div>
-                    <div className="h-4 bg-gray-200 rounded mb-2 w-1/2"></div>
-                    <div className="h-4 bg-gray-200 rounded w-full"></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <div className="text-center">Loading...</div>
         </main>
         <Footer />
       </div>
@@ -128,93 +112,58 @@ export default function MyDietPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1 container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">My Diet</h1>
-
-        {loading ? (
-          <div className="animate-pulse">
-            <div className="grid grid-cols-1 gap-4">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="border rounded-lg p-5 flex">
-                  <div className="h-20 w-20 bg-gray-200 rounded mr-4"></div>
-                  <div className="flex-1">
-                    <div className="h-6 bg-gray-200 rounded mb-2 w-1/3"></div>
-                    <div className="h-4 bg-gray-200 rounded mb-2 w-1/2"></div>
-                    <div className="h-4 bg-gray-200 rounded w-full"></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : savedProducts.length === 0 ? (
-          <div className="text-center py-12 border rounded-lg">
-            <h2 className="text-xl font-semibold mb-2">Your diet is empty</h2>
-            <p className="text-gray-600 mb-6">Save products to build your personalized diet</p>
+        <h1 className="text-2xl font-bold mb-6">My Diet</h1>
+        {savedProducts.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-500 mb-4">You haven't saved any products yet.</p>
             <Button asChild>
               <Link href="/search">Browse Products</Link>
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {savedProducts.map(item => (
-              <div key={item.id} className="border rounded-lg p-5 flex items-start">
-                <Link href={`/products/${item.product_id}`} className="block shrink-0 mr-4">
-                  {item.product.image_url ? (
-                    <img 
-                      src={item.product.image_url} 
-                      alt={item.product.name}
-                      className="w-20 h-20 object-cover rounded"
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {savedProducts.map((savedProduct) => (
+              <div key={savedProduct.id} className="border rounded-lg overflow-hidden">
+                <div className="aspect-square relative">
+                  {savedProduct.product.image_url ? (
+                    <img
+                      src={savedProduct.product.image_url}
+                      alt={savedProduct.product.name}
+                      className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="w-20 h-20 bg-gray-200 rounded flex items-center justify-center">
-                      <span className="text-xs text-gray-500">No image</span>
+                    <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+                      <span className="text-gray-400">No image</span>
                     </div>
                   )}
-                </Link>
-                
-                <div className="flex-1 min-w-0">
-                  <Link href={`/products/${item.product_id}`} className="block">
-                    <h3 className="text-lg font-semibold hover:text-blue-600">{item.product.name}</h3>
-                  </Link>
-                  <p className="text-gray-600 text-sm mb-1">{item.product.brand_name}</p>
-                  
-                  <div className="mb-2">
-                    {item.product.category && (
-                      <span className="bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded-full mr-2">
-                        {item.product.category.name}
-                      </span>
-                    )}
-                    
-                    {item.product.dietary_tags && item.product.dietary_tags.slice(0, 3).map((tag, index) => (
-                      <span 
-                        key={index}
-                        className="bg-green-100 text-green-800 text-xs px-2.5 py-1 rounded-full mr-2"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                    
-                    {item.product.dietary_tags && item.product.dietary_tags.length > 3 && (
-                      <span className="text-xs text-gray-500">
-                        +{item.product.dietary_tags.length - 3} more
-                      </span>
-                    )}
-                  </div>
-                  
-                  <p className="text-gray-700 text-sm line-clamp-2">{item.product.description}</p>
                 </div>
-                
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="text-gray-500 hover:text-red-600 ml-2"
-                  onClick={() => handleRemoveProduct(item.id)}
-                  title="Remove from my diet"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="p-4">
+                  <h3 className="font-semibold">{savedProduct.product.name}</h3>
+                  <p className="text-sm text-gray-500">{savedProduct.product.brand_name}</p>
+                  <p className="text-sm mt-2 line-clamp-2">{savedProduct.product.description}</p>
+                  <div className="mt-4 flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRemoveProduct(savedProduct.id)}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Remove
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                    >
+                      <Link href={`/products/${savedProduct.product.id}`}>
+                        View Details
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
               </div>
             ))}
           </div>

@@ -1,164 +1,121 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { Product } from '@/types';
-import { useAuth } from '@/contexts/auth-context';
-import { createClient } from '@/lib/supabase/client';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
+import { Heart, Share2 } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
+
+interface Product {
+  id: string;
+  name: string;
+  brand_name: string;
+  description: string;
+  image_url: string | null;
+  category_id: string;
+  dietary_tags: string[] | null;
+}
 
 interface ProductCardProps {
   product: Product;
+  isSaved?: boolean;
+  onSaveChange?: (saved: boolean) => void;
 }
 
-export default function ProductCard({ product }: ProductCardProps) {
-  const { user } = useAuth();
-  const [isSaved, setIsSaved] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const supabase = createClient();
-  
-  // Function to toggle save product
-  const toggleSaveProduct = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    
-    if (!user) {
-      // Redirect to login if not authenticated
-      window.location.href = '/login';
-      return;
-    }
-    
-    setIsLoading(true);
-    
+export default function ProductCard({ product, isSaved: initialIsSaved = false, onSaveChange }: ProductCardProps) {
+  const [isSaved, setIsSaved] = useState(initialIsSaved);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const handleSave = async () => {
+    setLoading(true);
     try {
-      if (isSaved) {
-        // Remove from saved products
-        const { error } = await supabase
-          .from('user_saved_products')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('product_id', product.id);
-          
-        if (error) throw error;
-        setIsSaved(false);
-      } else {
-        // Add to saved products
-        const { error } = await supabase
-          .from('user_saved_products')
-          .insert({
-            user_id: user.id,
-            product_id: product.id,
-          });
-          
-        if (error) throw error;
-        setIsSaved(true);
-      }
-    } catch (error) {
-      console.error('Error toggling product save:', error);
+      const { error } = await supabase
+        .from('saved_products')
+        .insert({
+          product_id: product.id
+        });
+
+      if (error) throw error;
+      setIsSaved(true);
+      onSaveChange?.(true);
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Failed to save product',
+        variant: 'destructive',
+      });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
-  
-  // Check if product is saved when user or product changes
-  useEffect(() => {
-    if (!user) return;
-    
-    const checkIfSaved = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('user_saved_products')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('product_id', product.id)
-          .maybeSingle();
-          
-        if (error) throw error;
-        setIsSaved(!!data);
-      } catch (error) {
-        console.error('Error checking if product is saved:', error);
-      }
-    };
-    
-    checkIfSaved();
-  }, [user, product.id, supabase]);
-  
+
+  const handleUnsave = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('saved_products')
+        .delete()
+        .eq('product_id', product.id);
+
+      if (error) throw error;
+      setIsSaved(false);
+      onSaveChange?.(false);
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Failed to unsave product',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const imageSrc = product.image_url || '/placeholder-product.jpg';
   const productTags = product.dietary_tags || [];
-  
+
   return (
-    <Link 
-      href={`/products/${product.slug}`}
-      className="block bg-white rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow"
-    >
-      <div className="relative h-48 bg-gray-100">
-        <Image 
-          src={imageSrc}
-          alt={product.name}
-          fill
-          className="transition-opacity opacity-0 duration-500 object-cover"
-          onLoadingComplete={(image) => image.classList.remove("opacity-0")}
-        />
-      </div>
-      
-      <div className="p-4">
-        <div className="flex justify-between items-start mb-2">
-          <h3 className="font-semibold text-lg leading-tight">
-            {product.name}
-          </h3>
-          
-          <button
-            onClick={toggleSaveProduct}
-            disabled={isLoading}
-            aria-label={isSaved ? "Remove from My Diet" : "Add to My Diet"}
-            className="text-gray-400 hover:text-blue-600 focus:outline-none transition-colors"
-          >
-            {isSaved ? (
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-              </svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-              </svg>
-            )}
-          </button>
-        </div>
-        
-        <p className="text-sm text-gray-500 mb-2">
-          {product.brand_name}
-        </p>
-        
-        {productTags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-3">
-            {productTags.slice(0, 3).map((tag: string) => (
-              <span 
-                key={tag} 
-                className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full"
-              >
-                {tag}
-              </span>
-            ))}
-            {productTags.length > 3 && (
-              <span className="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-full">
-                +{productTags.length - 3} more
-              </span>
-            )}
+    <div className="border rounded-lg overflow-hidden">
+      <div className="aspect-square relative">
+        {product.image_url ? (
+          <img
+            src={product.image_url}
+            alt={product.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+            <span className="text-gray-400">No image</span>
           </div>
         )}
-        
-        <div className="text-sm flex items-center justify-between">
-          <span className="text-blue-600">
-            View Details
-          </span>
-          
-          {product.category && (
-            <span className="text-gray-500">
-              {product.category.name}
-            </span>
-          )}
+      </div>
+      <div className="p-4">
+        <h3 className="font-semibold">{product.name}</h3>
+        <p className="text-sm text-gray-500">{product.brand_name}</p>
+        <p className="text-sm mt-2 line-clamp-2">{product.description}</p>
+        <div className="mt-4 flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={isSaved ? handleUnsave : handleSave}
+            disabled={loading}
+          >
+            <Heart className="w-4 h-4 mr-2" />
+            {isSaved ? 'Saved' : 'Save'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push(`/products/${product.id}`)}
+          >
+            <Share2 className="w-4 h-4 mr-2" />
+            Share
+          </Button>
         </div>
       </div>
-    </Link>
+    </div>
   );
 } 

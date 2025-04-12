@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -24,7 +24,7 @@ interface Product {
   category_id: string
   nutritional_info: Record<string, any> | null
   dietary_tags: string[] | null
-  platform_links: Record<string, string> | null
+  platform_links: string[] | null
   status: 'DRAFT' | 'PUBLISHED'
   created_at: string
   category: {
@@ -33,7 +33,14 @@ interface Product {
   } | null
 }
 
-export default function ProductPage() {
+interface SavedProduct {
+  id: string
+  user_id: string
+  product_id: string
+  created_at: string
+}
+
+export default function ProductBackupPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
@@ -42,23 +49,22 @@ export default function ProductPage() {
   const [loading, setLoading] = useState(true)
   const [isSaved, setIsSaved] = useState(false)
   const [savingStatus, setSavingStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle')
-  const productId = params?.id as string
+  const slug = params.slug as string
 
   useEffect(() => {
-    if (productId) {
+    if (slug) {
       fetchProduct()
       if (user) {
         checkIfSaved()
       }
     }
-  }, [productId, user])
+  }, [slug, user])
 
   const fetchProduct = async () => {
     try {
       setLoading(true)
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('products')
+      const response = await supabase
+        .from<Product>('products')
         .select(`
           *,
           category:category_id (
@@ -66,13 +72,13 @@ export default function ProductPage() {
             name
           )
         `)
-        .eq('id', productId)
+        .eq('slug', slug)
         .eq('status', 'PUBLISHED')
         .single()
 
-      if (error) throw error
+      if (response.error) throw response.error
       
-      setProduct(data)
+      setProduct(response.data)
     } catch (err) {
       console.error('Error fetching product:', err)
       router.push('/search')
@@ -82,64 +88,75 @@ export default function ProductPage() {
   }
 
   const checkIfSaved = async () => {
-    if (!user) return
+    if (!user || !product) return
     
     try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('saved_products')
+      const response = await supabase
+        .from<SavedProduct>('saved_products')
         .select('*')
         .eq('user_id', user.id)
-        .eq('product_id', productId)
+        .eq('product_id', product.id)
         .maybeSingle()
 
-      if (error) throw error
+      if (response.error) throw response.error
       
-      setIsSaved(!!data)
+      setIsSaved(!!response.data)
     } catch (err) {
       console.error('Error checking saved status:', err)
     }
   }
 
-  const toggleSave = async () => {
+  const handleSaveProduct = async () => {
     if (!user) {
       router.push('/login')
       return
     }
 
+    if (!product) return
+
     try {
       setSavingStatus('saving')
-      const supabase = createClient()
       
       if (isSaved) {
-        // Delete from saved products
-        const { error } = await supabase
-          .from('saved_products')
+        const response = await supabase
+          .from<SavedProduct>('saved_products')
           .delete()
           .eq('user_id', user.id)
-          .eq('product_id', productId)
-        
-        if (error) throw error
+          .eq('product_id', product.id)
+
+        if (response.error) throw response.error
         
         setIsSaved(false)
+        setSavingStatus('success')
+        toast({
+          title: 'Product removed',
+          description: 'Product has been removed from your diet',
+        })
       } else {
-        // Add to saved products
-        const { error } = await supabase
-          .from('saved_products')
+        const response = await supabase
+          .from<SavedProduct>('saved_products')
           .insert({
             user_id: user.id,
-            product_id: productId
+            product_id: product.id
           })
-        
-        if (error) throw error
+
+        if (response.error) throw response.error
         
         setIsSaved(true)
+        setSavingStatus('success')
+        toast({
+          title: 'Product saved',
+          description: 'Product has been added to your diet',
+        })
       }
-      
-      setSavingStatus('success')
     } catch (err) {
-      console.error('Error toggling saved status:', err)
+      console.error('Error saving/unsaving product:', err)
       setSavingStatus('error')
+      toast({
+        title: 'Error',
+        description: 'Failed to update product. Please try again.',
+        variant: 'destructive',
+      })
     } finally {
       setTimeout(() => setSavingStatus('idle'), 2000)
     }
@@ -168,37 +185,12 @@ export default function ProductPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col">
+      <div className="min-h-screen flex flex-col">
         <Header />
-        <main className="flex-1 container mx-auto px-4 py-8">
-          <div className="animate-pulse">
+        <main className="flex-1 container mx-auto p-4 flex items-center justify-center">
+          <div className="animate-pulse w-full max-w-4xl">
             <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
             <div className="h-6 bg-gray-200 rounded w-1/4 mb-8"></div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-              <div className="col-span-1">
-                <div className="h-80 bg-gray-200 rounded-lg mb-4"></div>
-              </div>
-              
-              <div className="col-span-2">
-                <div className="h-10 bg-gray-200 rounded w-1/2 mb-4"></div>
-                <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
-                <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
-                <div className="h-4 bg-gray-200 rounded w-3/4 mb-6"></div>
-                
-                <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
-                <div className="flex gap-2 mb-6">
-                  <div className="h-6 w-16 bg-gray-200 rounded-full"></div>
-                  <div className="h-6 w-16 bg-gray-200 rounded-full"></div>
-                  <div className="h-6 w-16 bg-gray-200 rounded-full"></div>
-                </div>
-                
-                <div className="flex gap-2">
-                  <div className="h-10 w-32 bg-gray-200 rounded"></div>
-                  <div className="h-10 w-32 bg-gray-200 rounded"></div>
-                </div>
-              </div>
-            </div>
           </div>
         </main>
         <Footer />
@@ -208,14 +200,15 @@ export default function ProductPage() {
 
   if (!product) {
     return (
-      <div className="flex min-h-screen flex-col">
+      <div className="min-h-screen flex flex-col">
         <Header />
-        <main className="flex-1 container mx-auto px-4 py-8">
-          <div className="text-center py-12">
-            <AlertCircle className="mx-auto h-16 w-16 text-gray-400 mb-4" />
-            <h1 className="text-2xl font-bold mb-2">Product Not Found</h1>
-            <p className="text-gray-600 mb-6">This product doesn't exist or has been removed.</p>
+        <main className="flex-1 container mx-auto p-4 flex items-center justify-center">
+          <div className="text-center">
+            <AlertCircle className="mx-auto h-12 w-12 text-red-500 mb-4" />
+            <h2 className="text-2xl font-bold mb-2">Product not found</h2>
+            <p className="text-gray-600 mb-6">The product you're looking for doesn't exist or has been removed.</p>
             <Button onClick={() => router.push('/search')}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
               Browse Products
             </Button>
           </div>
@@ -240,159 +233,53 @@ export default function ProductPage() {
   const nutritionalInfo = formatNutritionalInfo(product.nutritional_info)
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="min-h-screen flex flex-col">
       <Header />
-      <main className="flex-1 container mx-auto px-4 py-8">
-        <div className="flex flex-col md:flex-row justify-between items-start gap-2 mb-6">
-          <div>
-            <h1 className="text-3xl font-bold mb-1">{product.name}</h1>
-            <p className="text-gray-600">{product.brand_name}</p>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={toggleSave}
-              disabled={savingStatus === 'saving'}
-              className={isSaved ? 'text-green-600 border-green-600 hover:bg-green-50 hover:text-green-600' : ''}
-            >
-              {isSaved ? (
-                <>
-                  <BookmarkCheck className="mr-1 h-4 w-4" />
-                  Saved
-                </>
-              ) : (
-                <>
-                  <Bookmark className="mr-1 h-4 w-4" />
-                  Save
-                </>
-              )}
-            </Button>
-          </div>
+      <main className="flex-1 container mx-auto p-4">
+        <div className="mb-6">
+          <Button variant="ghost" onClick={() => router.push('/search')} className="text-sm text-gray-600 hover:text-gray-900">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Search
+          </Button>
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-          {/* Product image */}
-          <div className="col-span-1">
-            {product.image_url ? (
-              <img 
-                src={product.image_url} 
-                alt={product.name}
-                className="w-full h-auto max-h-80 object-contain rounded-lg border shadow"
-              />
-            ) : (
-              <div className="w-full h-80 bg-gray-200 flex items-center justify-center rounded-lg border">
-                <span className="text-gray-500">No image available</span>
-              </div>
+
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-2">
+            <p className="text-sm font-medium text-green-600">
+              {product.brand_name}
+            </p>
+            {product.category && (
+              <p className="text-xs text-gray-500">
+                {product.category.name}
+              </p>
             )}
           </div>
+          <h1 className="text-3xl font-bold mb-4">{product.name}</h1>
+          <p className="text-gray-700 mb-6">{product.description}</p>
           
-          {/* Product details */}
-          <div className="col-span-2">
-            <Tabs defaultValue="overview" className="w-full">
-              <TabsList className="mb-4">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="ingredients">Ingredients</TabsTrigger>
-                <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="overview" className="mt-0">
-                {product.description ? (
-                  <div className="prose max-w-none mb-6">
-                    <p>{product.description}</p>
-                  </div>
-                ) : (
-                  <p className="text-gray-500 mb-6">No description available</p>
-                )}
-                
-                {product.category && (
-                  <div className="mb-3">
-                    <p className="font-semibold mb-2">Category</p>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
-                        {product.category.name}
-                      </span>
-                    </div>
-                  </div>
-                )}
-                
-                {product.dietary_tags && product.dietary_tags.length > 0 && (
-                  <div className="mb-6">
-                    <p className="font-semibold mb-2">Dietary Tags</p>
-                    <div className="flex flex-wrap gap-2">
-                      {product.dietary_tags.map((tag, index) => (
-                        <span
-                          key={index}
-                          className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {product.platform_links && Object.keys(product.platform_links).length > 0 && (
-                  <div>
-                    <p className="font-semibold mb-2">Buy Online</p>
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(product.platform_links).map(([platform, url], index) => (
-                        <Button
-                          key={index}
-                          variant="outline"
-                          size="sm"
-                          asChild
-                        >
-                          <a href={url} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="mr-1 h-4 w-4" />
-                            {platform}
-                          </a>
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </TabsContent>
-              
-              <TabsContent value="ingredients" className="mt-0">
-                {product.ingredients ? (
-                  <div className="prose max-w-none">
-                    <p>{product.ingredients}</p>
-                  </div>
-                ) : (
-                  <p className="text-gray-500">No ingredients information available</p>
-                )}
-              </TabsContent>
-              
-              <TabsContent value="nutrition" className="mt-0">
-                {nutritionalInfo.length > 0 ? (
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-gray-100">
-                          <th className="px-4 py-2 text-left">Nutrient</th>
-                          <th className="px-4 py-2 text-right">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {nutritionalInfo.map((item, index) => (
-                          <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                            <td className="px-4 py-2 border-t">{item.name}</td>
-                            <td className="px-4 py-2 text-right border-t">
-                              {item.value} {item.unit}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="text-gray-500">No nutritional information available</p>
-                )}
-              </TabsContent>
-            </Tabs>
+          <div className="flex flex-wrap gap-2 mb-6">
+            {product.dietary_tags && product.dietary_tags.map((tag, index) => (
+              <span 
+                key={index} 
+                className="px-3 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full"
+              >
+                {tag}
+              </span>
+            ))}
           </div>
+          
+          <Button
+            variant="outline"
+            onClick={handleSaveProduct}
+            disabled={savingStatus === 'saving'}
+            className={isSaved ? "bg-green-50" : ""}
+          >
+            {savingStatus === 'saving' ? (
+              <span>Saving...</span>
+            ) : (
+              <span>{isSaved ? "Remove from Diet" : "Add to Diet"}</span>
+            )}
+          </Button>
         </div>
       </main>
       <Footer />
