@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
-import ProductSearch from '@/components/products/product-search';
+import SearchPage from '@/components/search/search-page';
 
 export const metadata: Metadata = {
   title: 'Reccos by Fitin - Discover Healthy Food Alternatives',
@@ -96,7 +96,7 @@ export default function HomePage() {
               Search through our curated collection of healthy food products
             </p>
             
-            <ProductSearch />
+            <SearchPage />
           </div>
         </div>
       </section>

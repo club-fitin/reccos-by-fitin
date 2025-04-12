@@ -35,7 +35,7 @@ export default function ProductsPage() {
               <h2 className="text-xl font-semibold mb-2">{product.name}</h2>
               <p className="text-gray-600 mb-4">{product.description}</p>
               <div className="flex justify-between items-center">
-                <span className="text-purple-600 font-bold">${product.price}</span>
+                <span className="text-purple-600 font-bold">{product.brand_name}</span>
                 <button className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600">
                   View Details
                 </button>

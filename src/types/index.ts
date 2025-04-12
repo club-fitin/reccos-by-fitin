@@ -1,3 +1,5 @@
+import { Database } from '@/types/supabase';
+
 export interface Category {
   id: string;
   name: string;

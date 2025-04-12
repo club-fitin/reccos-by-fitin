@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '../../../../lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Product } from '../types'
 
 interface ProductFormProps {
@@ -12,7 +12,6 @@ interface ProductFormProps {
 
 export default function ProductForm({ product, onSuccess }: ProductFormProps) {
   const router = useRouter()
-  const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState<Partial<Product>>({

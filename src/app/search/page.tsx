@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { useAuth } from '@/contexts/auth-context'
@@ -24,7 +24,6 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null)
   const { user } = useAuth()
   const router = useRouter()
-  const supabase = createClient()
 
   useEffect(() => {
     if (!user) {

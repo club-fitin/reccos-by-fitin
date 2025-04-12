@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import ProductCard, { Product } from '@/components/product-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,7 +25,6 @@ export default function SearchPage({ initialQuery = '' }: SearchPageProps) {
   const [selectedDietaryTags, setSelectedDietaryTags] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [dietaryTags, setDietaryTags] = useState<string[]>([]);
-  const supabase = createClient();
   
   // Load categories once on component mount
   useEffect(() => {
@@ -33,28 +32,26 @@ export default function SearchPage({ initialQuery = '' }: SearchPageProps) {
       const { data } = await supabase
         .from('categories')
         .select('id, name, slug')
-        .order('name');
+        .order('name', { ascending: true });
       
       if (data) {
-        setCategories(data);
+        setCategories(data as Category[]);
       }
     };
     
     loadCategories();
-  }, [supabase]);
+  }, []);
   
   // Load distinct dietary tags once
   useEffect(() => {
     const loadDietaryTags = async () => {
-      // This is a simplified approach; in a real app, you might want to have a dedicated table for dietary tags
       const { data } = await supabase
         .from('products')
         .select('dietary_tags')
         .eq('status', 'PUBLISHED');
       
       if (data) {
-        // Extract and flatten all tags from products, then get unique values
-        const allTags = data
+        const allTags = (data as { dietary_tags: string[] }[])
           .flatMap(product => product.dietary_tags || [])
           .filter(Boolean);
         const uniqueTags = [...new Set(allTags)];
@@ -107,8 +104,8 @@ export default function SearchPage({ initialQuery = '' }: SearchPageProps) {
           });
         }
         
-        const { data } = await query.order('name');
-        setProducts(data || []);
+        const { data } = await query.order('name', { ascending: true });
+        setProducts((data || []) as Product[]);
       } catch (error) {
         console.error('Error searching products:', error);
       } finally {

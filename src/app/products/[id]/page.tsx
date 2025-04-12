@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { useAuth } from '@/contexts/auth-context'
@@ -27,7 +27,6 @@ export default function ProductPage() {
   const { user } = useAuth()
   const params = useParams()
   const router = useRouter()
-  const supabase = createClient()
 
   useEffect(() => {
     if (!user) {
