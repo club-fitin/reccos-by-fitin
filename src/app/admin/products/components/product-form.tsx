@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { Product } from '@/app/admin/products/types'
+import { createClient } from '../../../../lib/supabase/client'
+import { Product } from '../types'
 
 interface ProductFormProps {
   product?: Product
@@ -73,7 +73,7 @@ export default function ProductForm({ product, onSuccess }: ProductFormProps) {
   }
 
   const handleArrayChange = (name: string, value: string) => {
-    setFormData(prev => ({
+    setFormData((prev: Partial<Product>) => ({
       ...prev,
       [name]: value.split(',').map(item => item.trim())
     }))
@@ -220,6 +220,20 @@ export default function ProductForm({ product, onSuccess }: ProductFormProps) {
             name="dietary_tags"
             value={formData.dietary_tags?.join(', ')}
             onChange={(e) => handleArrayChange('dietary_tags', e.target.value)}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+          />
+        </div>
+
+        <div className="md:col-span-2">
+          <label htmlFor="platform_links" className="block text-sm font-medium text-gray-700">
+            Platform Links (comma-separated)
+          </label>
+          <input
+            type="text"
+            id="platform_links"
+            name="platform_links"
+            value={formData.platform_links?.join(', ')}
+            onChange={(e) => handleArrayChange('platform_links', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
           />
         </div>
